@@ -1,0 +1,43 @@
+PASS no wallet: program and rubric readable
+PASS no wallet: past submissions readable
+PASS no wallet: submit disabled with reason
+PASS no wallet: explanation shown
+PASS no key material or password inputs
+PASS empty rubric: submit locked with reason
+PASS connect: wrong chain -> add chain then switch
+PASS connect: ends on Studio chain
+PASS connect: address shown
+PASS connected but empty URL: reason asks for a URL
+PASS input check: non-http scheme blocks submit
+PASS input check: localhost blocks submit
+PASS input check: over 500 chars blocks submit
+PASS input check: plain text blocks submit
+PASS valid URL enables submit
+PASS sample link fills the box
+PASS connect rejection explained
+PASS lifecycle: ACCEPTED shown as in progress, not applied
+PASS lifecycle: FINALIZED+SUCCESS reported as applied
+PASS lifecycle: sent through wallet from connected account
+PASS lifecycle: new entry confirmed by count and shown
+PASS lifecycle: list now has two entries
+PASS lifecycle: input cleared and button usable again
+PASS lifecycle: pending record cleared
+PASS success but count unchanged: no false 'stored' claim
+PASS contract error: FINALIZED+ERROR reported as refused
+PASS undetermined: reported as not applied
+PASS user rejects signature: clear message, no polling
+PASS user rejects: button usable again
+PASS send error with unchanged nonce: not sent
+PASS send error but nonce moved: ambiguous, resend discouraged
+PASS network switched away: warning shown
+PASS wrong network at send time: switched back before sending
+PASS busy: submit locked while the review is open
+PASS busy: still locked and still waiting after several polls
+PASS only one transaction was sent
+PASS resume: reports the final result of the earlier review
+PASS resume: record cleared
+PASS resume: works without a connected wallet and refreshes the list
+PASS hostile url/rule/submitter rendered as text, no script ran
+PASS no page errors in the whole run
+
+41 passed, 0 failed

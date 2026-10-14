@@ -64,6 +64,8 @@ input[type=url]{width:100%;padding:11px 12px;border:1px solid var(--border);bord
 .v.fail{color:var(--needs)}
 .empty{color:var(--muted);font-size:13px}
 .overflow{overflow-x:auto}
+#txmsg,#wmsg,#submitReason{white-space:pre-wrap}
+.status-line.err{color:#d1242f}
 footer{text-align:center;font-size:12px;color:var(--muted);margin-top:24px}
 footer a{color:var(--muted)}
 </style>
@@ -80,6 +82,8 @@ footer a{color:var(--muted)}
       <div id="addrLine" class="addr" style="margin-top:6px"></div>
     </div>
   </header>
+
+  <div id="wmsg" class="status-line" style="margin:-10px 0 12px"></div>
 
   <div class="card">
     <h2>What this does</h2>
@@ -103,16 +107,17 @@ footer a{color:var(--muted)}
   <div class="card">
     <h2>Submit for review</h2>
     <input id="urlInput" type="url" placeholder="https://github.com/your-org/your-repo">
-    <button id="submitBtn" class="btn" style="width:100%">Submit for Review</button>
+    <button id="submitBtn" class="btn" style="width:100%" disabled>Submit for Review</button>
+    <div id="submitReason" class="status-line"></div>
     <div class="status-line" style="margin-top:8px">Try a sample:
       <a href="#" data-url="https://github.com/Oziman13/genlayer-preflight" style="color:var(--accent)">genlayer-preflight</a> ·
       <a href="#" data-url="https://github.com/Oziman13/genlayer-community-pulse" style="color:var(--accent)">genlayer-community-pulse</a>
     </div>
-    <div id="statusLine" class="status-line"></div>
+    <div id="txmsg" class="status-line">Nothing sent yet.</div>
   </div>
 
   <div class="card">
-    <h2>Past submissions</h2>
+    <h2>Past submissions <button id="refreshBtn" class="btn secondary" style="float:right;padding:4px 10px;font-size:12px">Refresh</button></h2>
     <div id="submissions" class="empty">Loading submissions…</div>
   </div>
 
@@ -127,156 +132,6 @@ footer a{color:var(--muted)}
   <footer style="margin-top:6px">Network: GenLayer Studionet · chain ID 61999 · RPC studio.genlayer.com/api</footer>
 </div>
 
-<script type="module">
-const CONTRACT_ADDRESS = "0x1B1838955D84b48d0b548C278759f58b0dD6ae83";
-const SDK = "https://cdn.jsdelivr.net/npm/genlayer-js@1.1.8";
-
-document.getElementById("contractAddr").textContent = CONTRACT_ADDRESS;
-document.getElementById("explorerLink").href =
-  "https://explorer-studio.genlayer.com/address/" + CONTRACT_ADDRESS;
-
-const $ = (id) => document.getElementById(id);
-let readClient, writeClient, studionet, TransactionStatus, isSuccessful, connected = null;
-
-function esc(s){return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function short(a){return a ? a.slice(0,6)+"…"+a.slice(-4) : "";}
-
-async function readJSON(fn, args=[]){
-  const r = await readClient.readContract({ address: CONTRACT_ADDRESS, functionName: fn, args });
-  return typeof r === "string" ? JSON.parse(r) : r;
-}
-
-async function loadProgram(){
-  try{
-    const [name, threshold, count] = await Promise.all([
-      readClient.readContract({address:CONTRACT_ADDRESS, functionName:"get_program_name", args:[]}),
-      readClient.readContract({address:CONTRACT_ADDRESS, functionName:"get_pass_threshold", args:[]}),
-      readClient.readContract({address:CONTRACT_ADDRESS, functionName:"get_submission_count", args:[]}),
-    ]);
-    $("programName").textContent = name;
-    $("threshold").textContent = Number(threshold) + "%";
-    $("subCount").textContent = Number(count);
-  }catch(e){ console.error(e); }
-}
-
-async function loadRubric(){
-  try{
-    const rubric = await readJSON("get_rubric_json");
-    if (!rubric.rules.length){ $("rubric").innerHTML = '<div class="empty">No rules yet.</div>'; return; }
-    $("rubric").innerHTML = rubric.rules.map(r => `
-      <div class="rule">
-        <div class="rule-text">${esc(r.text)} <span style="color:var(--muted)">· weight ${r.weight}</span></div>
-        <span class="badge ${r.mandatory ? "mand" : "adv"}">${r.mandatory ? "MANDATORY" : "ADVISORY"}</span>
-      </div>`).join("");
-  }catch(e){ $("rubric").innerHTML = '<div class="empty">Could not load rubric.</div>'; console.error(e); }
-}
-
-async function loadSubmissions(){
-  try{
-    const count = Number(await readClient.readContract({address:CONTRACT_ADDRESS, functionName:"get_submission_count", args:[]}));
-    if (!count){ $("submissions").innerHTML = '<div class="empty">No submissions yet — be the first.</div>'; return; }
-    let html = "";
-    for (let i = count - 1; i >= 0; i--){
-      const s = await readJSON("get_submission_json", [i]);
-      const badgeClass = s.status === "READY" ? "ready" : "needs";
-      html += `
-        <div class="sub">
-          <div class="sub-top">
-            <span class="badge ${badgeClass}">${s.status} · ${s.score}%</span>
-            <span style="font-size:12px;color:var(--muted)">#${s.id} · rubric v${s.rubric_version}</span>
-          </div>
-          <div class="sub-url"><a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.url)}</a></div>
-          <div class="sub-meta">by ${short(s.submitter)}</div>
-          <div class="verdicts">${s.verdicts.map(v =>
-            `<span class="v ${v.result === "PASS" ? "pass":"fail"}">#${v.id} ${v.result}</span>`).join("")}</div>
-        </div>`;
-    }
-    $("submissions").innerHTML = html;
-  }catch(e){ $("submissions").innerHTML = '<div class="empty">Could not load submissions.</div>'; console.error(e); }
-}
-
-async function refreshAll(){ await Promise.all([loadProgram(), loadRubric(), loadSubmissions()]); }
-
-async function connectWallet(){
-  if (!window.ethereum){ alert("No wallet found. Install MetaMask to submit reviews (viewing works without it)."); return; }
-  $("connectBtn").disabled = true; $("connectBtn").textContent = "Connecting…";
-  try{
-    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-    connected = accounts[0];
-    writeClient = createClient({ chain: studionet, account: connected, provider: window.ethereum });
-    await writeClient.connect("studionet");
-    $("addrLine").textContent = short(connected);
-    $("connectBtn").textContent = "Connected";
-  }catch(e){
-    console.error(e);
-    $("connectBtn").disabled = false; $("connectBtn").textContent = "Connect Wallet";
-    alert("Could not connect wallet: " + (e.message || e));
-  }
-}
-
-async function submitForReview(){
-  const url = $("urlInput").value.trim();
-  if (!url){ $("statusLine").textContent = "Enter a URL first."; return; }
-  if (!writeClient){ await connectWallet(); if (!writeClient) return; }
-  $("submitBtn").disabled = true;
-  try{
-    const call = { address: CONTRACT_ADDRESS, functionName: "submit_for_review", args: [url] };
-    // Fee-charging deployments need an estimate; older SDKs/networks don't have one.
-    if (typeof writeClient.estimateTransactionFeesForWrite === "function"){
-      try{
-        $("statusLine").textContent = "Estimating fees…";
-        const est = await writeClient.estimateTransactionFeesForWrite(call);
-        call.fees = { distribution: est.distribution, feeValue: est.feeValue };
-      }catch(e){ console.warn("Fee estimate skipped:", e); }
-    }
-    $("statusLine").textContent = "Sending transaction — confirm in your wallet…";
-    const txHash = await writeClient.writeContract(call);
-    $("statusLine").textContent = "Tx sent (" + short(txHash) + "). Waiting for validator consensus — this fetches the page, judges every rule, and reaches agreement, so it can take a minute…";
-    let tx;
-    if (typeof writeClient.waitForDecision === "function"){
-      tx = await writeClient.waitForDecision({ hash: txHash });
-    }else{
-      tx = await writeClient.waitForTransactionReceipt({
-        hash: txHash, status: TransactionStatus.ACCEPTED, retries: 60, interval: 5000,
-      });
-    }
-    if (typeof isSuccessful === "function" && !isSuccessful(tx)){
-      throw new Error("Accepted by consensus, but the contract call did not succeed (" + (tx.txExecutionResultName || tx.statusName) + ").");
-    }
-    $("statusLine").textContent = "Reviewed! Refreshing results…";
-    $("urlInput").value = "";
-    await refreshAll();
-    $("statusLine").textContent = "Done — see the new entry below.";
-  }catch(e){
-    console.error(e);
-    $("statusLine").textContent = "Failed: " + (e.message || e) + " — you can press Submit again to retry.";
-  }finally{
-    $("submitBtn").disabled = false;
-  }
-}
-
-(async function init(){
-  try{
-    const core = await import(SDK + "/+esm");
-    const chains = await import(SDK + "/chains/+esm");
-    const types = await import(SDK + "/types/+esm");
-    window.createClient = core.createClient;
-    studionet = chains.studionet;
-    TransactionStatus = types.TransactionStatus;
-    isSuccessful = core.isSuccessful;
-    readClient = core.createClient({ chain: studionet });
-    await refreshAll();
-  }catch(e){
-    console.error(e);
-    $("rubric").innerHTML = '<div class="empty">Could not load the GenLayer SDK. Try reloading.</div>';
-  }
-})();
-
-document.querySelectorAll("[data-url]").forEach(a => a.addEventListener("click", e => {
-  e.preventDefault(); $("urlInput").value = a.dataset.url;
-}));
-$("connectBtn").addEventListener("click", connectWallet);
-$("submitBtn").addEventListener("click", submitForReview);
-</script>
+<script src="app.js"></script>
 </body>
 </html>

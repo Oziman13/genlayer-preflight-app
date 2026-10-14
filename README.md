@@ -17,14 +17,23 @@ https://github.com/Oziman13/genlayer-preflight
 - Reads the program name, pass threshold, rubric and past submissions straight
   from the contract. There is no backend.
 - Connects a browser wallet and switches it to GenLayer Studionet.
-- Sends `submit_for_review`, estimates fees where the network supports it, and
-  waits for the validators' decision.
-- Checks that the contract call itself succeeded (an accepted transaction alone
-  does not prove that), re-reads the submissions, and shows pending, success and
-  failure states. A failed submission can be retried.
+- Checks the URL before sending (non-empty, http(s), at most 500 characters,
+  no localhost) and says why the button is locked when it is.
+- Sends `submit_for_review` (with a fee estimate where the network supports it)
+  and follows the transaction to the end. A review counts as applied only when
+  the network status is **FINALIZED** and the contract call itself succeeded.
+  ACCEPTED is shown as "still in progress", a contract refusal and an
+  UNDETERMINED/timeout result are reported as "not applied", and after a
+  success the app confirms a new entry really exists before saying so.
+- Handles the wallet explicitly: rejected connection or signature, wrong or
+  unknown network (it is switched back before every send), a send error that
+  may still have gone out (flagged, resend discouraged), and a locked button
+  while a review is open so it cannot be sent twice.
+- Remembers an open review in the browser. If the page is closed or reloaded
+  before the result is final, it keeps watching that transaction on return.
 
-The app is a single static page (`index.html`) built on the official
-`genlayer-js` SDK, loaded from jsDelivr.
+The app is a static page (`index.html` plus the bundled `app.js`). The source of
+`app.js` is in `src/` and is built on the official `genlayer-js` SDK.
 
 ## Network and contract
 
@@ -78,7 +87,19 @@ approves a repository with a README and tests rejects one without them.
 
 ## Run it locally
 
-Open `index.html` in a browser. No build step.
+Serve the folder with any static server (for example `python3 -m http.server`)
+and open `index.html`. `app.js` is already built. To rebuild it from `src/`:
+`npm i genlayer-js esbuild` and `npx esbuild src/main.js --bundle --format=iife --minify --outfile=app.js`.
+
+## Tests of the page
+
+`tests/browser/wallet_flow.test.mjs` drives the real page in headless Chromium
+with a mock EIP-1193 wallet and a mock Studio RPC: 41 checks, last run in
+`evidence/browser-tests.txt`. They cover no wallet, empty rubric, input checks,
+connecting, the full ACCEPTED -> FINALIZED lifecycle, contract refusal,
+UNDETERMINED, rejected and failed sends, wrong network, double-send lock,
+resuming after reload and safe rendering of hostile text. They prove the page's
+behaviour, **not** real MetaMask or real Studionet behaviour.
 
 ## Known limitations
 
