@@ -23,7 +23,15 @@ function say(text, err = false) { const m = $("txmsg"); m.className = "status-li
 const txLink = h => EXPLORER ? `\nExplorer: ${EXPLORER}/tx/${h}` : "";
 
 // ---------- reading (no wallet needed) ----------
-async function readText(fn, args = []) { return await reader.readContract({ address: CONTRACT_ADDRESS, functionName: fn, args }); }
+// Reads can fail briefly on the public Studio RPC (rate limit, hiccup), so retry a few times before giving up.
+async function readText(fn, args = []) {
+  let last;
+  for (let i = 0; i < 4; i++) {
+    try { return await reader.readContract({ address: CONTRACT_ADDRESS, functionName: fn, args }); }
+    catch (e) { last = e; await new Promise(r => setTimeout(r, (POLL ? 50 : 1000) * (i + 1))); }
+  }
+  throw last;
+}
 async function readJSON(fn, args = []) { const r = await readText(fn, args); return typeof r === "string" ? JSON.parse(r) : r; }
 
 async function loadProgram() {
@@ -70,7 +78,7 @@ async function loadSubmissions() {
         </div>`;
     }
     $("submissions").innerHTML = html;
-  } catch (e) { $("submissions").innerHTML = '<div class="empty">Could not load submissions.</div>'; console.error(e); }
+  } catch (e) { $("submissions").innerHTML = '<div class="empty">Could not load submissions. Press Refresh to try again.</div>'; console.error(e); }
 }
 
 async function refreshAll() { await Promise.all([loadProgram(), loadRubric(), loadSubmissions()]); }
